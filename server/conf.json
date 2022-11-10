@@ -1,0 +1,8 @@
+{
+  "server": "127.0.0.1",
+  "port": 3000,
+  "sqlite3db": "./sanalyse.db",
+  "sar_dir": "./sar_file/sar202210",
+  "sar_time_pattern": "%H時%M分%S秒",
+  "trend_div": 3600
+}

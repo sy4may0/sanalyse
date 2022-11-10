@@ -21,3 +21,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+server/sar_file
+server/*.db
+server/lib/__pycache__
