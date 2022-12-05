@@ -44,15 +44,15 @@ def updateTrend():
   dataSource.buildMemTrendData()
   dataSource.buildIOTrendData()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='./build', static_url_path='/')
 CORS(
   app,
   supports_credentials=True
 )
 
-@app.route("/")
-def hello():
-  return "Hello World"
+#@app.route("/")
+#def hello():
+#  return "Hello World"
 
 @app.route("/hostlist")
 def host_list_get():
@@ -124,6 +124,7 @@ def io_get(datatype):
     return jsonify({"rc": 1}) 
  
 if __name__ == "__main__":
+  print(app.url_map)
   if len(sys.argv) > 1 and sys.argv[1] == '-update':
     readAllSarFile()
     updateTrend()

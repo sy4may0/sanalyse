@@ -23,5 +23,6 @@ yarn-debug.log*
 yarn-error.log*
 
 server/sar_file
+server/build
 server/*.db
 server/lib/__pycache__
