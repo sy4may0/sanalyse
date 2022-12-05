@@ -12,11 +12,16 @@ import FormControl from '@mui/material/FormControl'
 import Select, { SelectChangeEvent } from '@mui/material/Select'
 
 import LineChart from './components/LineChart';
-import StartEndPicker from './components/StartEndPicker';
 
 import axios from 'axios'
 import Container from '@mui/material/Container';
 import Toolbar from '@mui/material/Toolbar';
+
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 export type HandleChangeDateFuncType = (date: Date|null|undefined) => void;
 export type DBResultCPUData = {
@@ -48,7 +53,7 @@ export type DBResultIOData = {
 }
 
 const axiosRequestor = axios.create({
-  baseURL: "http://localhost:3000",
+  baseURL: "http://192.168.19.78:3000",
   headers: {
     "Content-Type": "application/json",
     "X-Requested-With": "XMLHttpRequest",
@@ -200,8 +205,6 @@ function App() {
 
   const hosts: Array<string> = [];
   const h: string = '';
-  const start = new Date();
-  const end = new Date();
   const cpuChart = {
     labels: [new Date()],
     datasets: [{
@@ -218,8 +221,8 @@ function App() {
 
   const [hostlist, setHostlist] = useState(hosts);
   const [host, setHost] = useState(h);
-  const [startDate, setStartDate] = useState(start);
-  const [endDate, setEndDate] = useState(end);
+  const [startDate, setStartDate] = React.useState<Date|null>(new Date());
+  const [endDate, setEndDate] = React.useState<Date|null>(new Date());
   const [cpuChartData, setCpuChartData] = useState(cpuChart);
   const [memChartData, setMemChartData] = useState(memChart);
   const [ioChartData, setIOChartData] = useState(ioChart);
@@ -228,34 +231,25 @@ function App() {
   useEffect(() => {
     axiosRequestor.get('/hostlist').then(function(res) {
       setHostlist(res.data);
-      setHost(res.data[0])
-    })
+      setHost(res.data[0]);
+      console.log('update')
+      console.log(res.data);
+    });
   }, []);
 
   const handleChangeHost = (event: SelectChangeEvent) => {
     setHost(event.target.value as string);
   }
 
-  const handleChangeStartDate :HandleChangeDateFuncType = (date: Date|null|undefined) => {
-    if(date != null) {
-      setStartDate(date)
-    }
-  };
-
-  const handleChangeEndDate :HandleChangeDateFuncType = (date: Date|null|undefined) => {
-    if(date != null) {
-      setEndDate(date)
-    }
-  };
-
   const updateChartData = () => {
     let iocd: Array<any> = new Array<any>;
     axiosRequestor.get("/cpu_util/trend",{
       params: {
         host: host,
-        start: formatDate(startDate) + "T00:00:00",
-        end: formatDate(endDate) + "T23:59:59"
+        start: formatDate(startDate!) + "T00:00:00",
+        end: formatDate(endDate!) + "T23:59:59"
       }
+
     }).then(function(res) {
       console.log("cpu_use set updated. rc is " + res.data.rc);
       const cpuChartDataSet = buildCPUChartDataSet(res.data.result);
@@ -265,8 +259,8 @@ function App() {
     axiosRequestor.get("/mem_use/trend",{
       params: {
         host: host,
-        start: formatDate(startDate) + "T00:00:00",
-        end: formatDate(endDate) + "T23:59:59"
+        start: formatDate(startDate!) + "T00:00:00",
+        end: formatDate(endDate!) + "T23:59:59"
       }
     }).then(function(res) {
       console.log("mem_use set updated. rc is " + res.data.rc)
@@ -280,8 +274,8 @@ function App() {
           params: {
             host: host,
             device: device,
-            start: formatDate(startDate) + "T00:00:00",
-            end: formatDate(endDate) + "T23:59:59"
+            start: formatDate(startDate!) + "T00:00:00",
+            end: formatDate(endDate!) + "T23:59:59"
           }
         }).then(function(res) {
           console.log("io set update. rc is " + res.data.rc)
@@ -296,35 +290,58 @@ function App() {
     <div className="App">
       <header className="App-header">
       <Box className="appbar-wrap ignore-print-area">
-        <AppBar position="static">
+        <AppBar position="static" color='transparent'>
           <Container maxWidth="xl">
             <Toolbar disableGutters>
-              <StartEndPicker
-                startDate={startDate}
-                endDate={endDate}
-                handleChangeStartDate={handleChangeStartDate}
-                handleChangeEndDate={handleChangeEndDate}
-              ></StartEndPicker>
-              <Box>
-                <FormControl>
-                  <InputLabel id="host-select-label">Host</InputLabel>
-                  <Select
-                    labelId="host-select-label"
-                    id="host-select"
-                    value={host}
-                    label='Host'
-                    onChange={handleChangeHost}
-                  >
-                  {hostlist.map((h) => (
-                    <MenuItem
-                      key={h}
-                      value={h}
-                    >{h}</MenuItem>
-                  ))}
-                  </Select>
-                </FormControl>
+              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <Box className='appbar-form-item'>
+                <DatePicker
+                  className='appbar-datepicker'
+                  label="start"
+                  value={startDate}
+                  onChange={(newValue) =>{ setStartDate(newValue) }}
+                  renderInput={(params) => <TextField {...params}/>}
+                  
+                ></DatePicker>
+                </Box>
+
+                <Box className='appbar-form-item'>
+                <DatePicker
+                  className='appbar-datepicker'
+                  label="end"
+                  value={endDate}
+                  onChange={(newValue) =>{ setEndDate(newValue) }}
+                  renderInput={(params) => <TextField {...params}/>}
+                ></DatePicker>
+                </Box>
+              </LocalizationProvider>
+              <Box className='appbar-form-item'>
+              <FormControl>
+                <InputLabel id="host-select-label" className='appbar-inputlabel'>Host</InputLabel>
+                <Select
+                  className='appbar-selectbox'
+                  labelId="host-select-label"
+                  id="host-select"
+                  value={host}
+                  label='Host'
+                  onChange={handleChangeHost}
+                >
+                {hostlist.map((h) => (
+                  <MenuItem
+                    key={h}
+                    value={h}
+                  >{h}</MenuItem>
+                ))}
+                </Select>
+              </FormControl>
               </Box>
-              <button onClick={updateChartData}>Render</button>
+              <Box className='appbar-form-item'>
+              <Button 
+                onClick={updateChartData}
+                variant="contained"
+                color='primary'
+              >Render</Button>
+              </Box>
             </Toolbar>
           </Container>
         </AppBar>

@@ -35,6 +35,14 @@
   page-break-before: always;
 }
 
+.appbar-form-item {
+  padding-top: 10px;
+  padding-bottom: 5px;
+  padding-left: 3px;
+  padding-right: 3px;
+  color:aliceblue; 
+}
+
 .App-header {
   background-color: #ffffff;
   min-height: 100vh;

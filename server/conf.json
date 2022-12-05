@@ -1,5 +1,5 @@
 {
-  "server": "127.0.0.1",
+  "server": "0.0.0.0",
   "port": 3000,
   "sqlite3db": "./sanalyse.db",
   "sar_dir": "./sar_file/sar202210",
