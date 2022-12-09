@@ -2,7 +2,6 @@ import React from 'react';
 import { useState, useEffect } from 'react';
 import './App.css';
 import { format } from 'date-fns';
-import cloneDeep from 'lodash/cloneDeep'
 
 import Box from '@mui/material/Box'
 import AppBar from '@mui/material/AppBar'
@@ -22,6 +21,8 @@ import Button from '@mui/material/Button';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+
+import {createTheme, ThemeProvider } from '@mui/material/styles';
 
 export type HandleChangeDateFuncType = (date: Date|null|undefined) => void;
 export type DBResultCPUData = {
@@ -46,11 +47,49 @@ export type DBResultMemData = {
   kbcommit: Array<number>
 };
 
+export type ChartDataResult = {
+  promise: Promise<any>
+  host: string
+  metrics: string
+  device: string
+  rc: undefined|string
+  chartdata: any
+}
+
 export type DBResultIOData = {
   datetime: Array<number>
   readsec: Array<number>
   writesec: Array<number>
 }
+
+const theme = createTheme({
+  palette: {
+    primary: {
+      light: '#fffff6',
+      main: '#f0f4c3',
+      dark: '#bdc192',
+      contrastText: '#000000',
+    },
+    secondary: {
+      light: '#ffe54c',
+      main: '#ffb300',
+      dark: '#c68400',
+      contrastText: '#fff8e1',
+    },
+  },
+})
+
+const metrics2ChartTitle: Map<string, string> = new Map([
+  ['cpu', 'CPU Utilization'],
+  ['memory', 'Memory Usage'],
+  ['io', 'Disk IO'],
+])
+
+const metrics2JpTitle: Map<string, string> = new Map([
+  ['cpu', 'CPU使用状況'],
+  ['memory', 'メモリ使用状況'],
+  ['io', 'ディスク使用状況'],
+])
 
 const axiosRequestor = axios.create({
   baseURL: "http://192.168.19.78:3000",
@@ -204,7 +243,13 @@ function buildIOChartDataSet(result: DBResultIOData, device: string): any {
 function App() {
 
   const hosts: Array<string> = [];
+  const metricses: Array<string> = [
+    'cpu',
+    'memory',
+    'io',
+  ];
   const h: string = '';
+  const m: string = 'cpu';
   const cpuChart = {
     labels: [new Date()],
     datasets: [{
@@ -218,19 +263,22 @@ function App() {
     }],
   };
   const ioChart: Array<any> = [];
+  const charts: Array<ChartDataResult> = [];
 
   const [hostlist, setHostlist] = useState(hosts);
+  const [metricslist, setMetricslist] = useState(metricses);
   const [host, setHost] = useState(h);
+  const [metrics, setMetrics] = useState(m);
   const [startDate, setStartDate] = React.useState<Date|null>(new Date());
   const [endDate, setEndDate] = React.useState<Date|null>(new Date());
-  const [cpuChartData, setCpuChartData] = useState(cpuChart);
-  const [memChartData, setMemChartData] = useState(memChart);
-  const [ioChartData, setIOChartData] = useState(ioChart);
+  const [renderCharts, setRenderCharts] = useState(charts)
 
   // UseEffectの第二引数に空配列を渡すとコンポーネント読み込み時に1度だけ実行する処理を定義できる。
   useEffect(() => {
     axiosRequestor.get('/hostlist').then(function(res) {
-      setHostlist(res.data);
+      let hl = res.data;
+      hl.push('all')
+      setHostlist(hl);
       setHost(res.data[0]);
       console.log('update')
       console.log(res.data);
@@ -240,57 +288,124 @@ function App() {
   const handleChangeHost = (event: SelectChangeEvent) => {
     setHost(event.target.value as string);
   }
+  const handleChangeMetrics = (event: SelectChangeEvent) => {
+    setMetrics(event.target.value as string);
+  }
 
-  const updateChartData = () => {
-    let iocd: Array<any> = new Array<any>;
-    axiosRequestor.get("/cpu_util/trend",{
-      params: {
-        host: host,
-        start: formatDate(startDate!) + "T00:00:00",
-        end: formatDate(endDate!) + "T23:59:59"
-      }
-
-    }).then(function(res) {
-      console.log("cpu_use set updated. rc is " + res.data.rc);
-      const cpuChartDataSet = buildCPUChartDataSet(res.data.result);
-      setCpuChartData(cpuChartDataSet);
-    });
-
-    axiosRequestor.get("/mem_use/trend",{
-      params: {
-        host: host,
-        start: formatDate(startDate!) + "T00:00:00",
-        end: formatDate(endDate!) + "T23:59:59"
-      }
-    }).then(function(res) {
-      console.log("mem_use set updated. rc is " + res.data.rc)
-      const memChartDataSet = buildMEMChartDataSet(res.data.result)
-      setMemChartData(memChartDataSet)
-    });
-
-    axiosRequestor.get("/iodevicelist:" + host).then(function(res) {
-      for(const device of res.data) {
-        axiosRequestor.get("io/trend", {
-          params: {
-            host: host,
-            device: device,
-            start: formatDate(startDate!) + "T00:00:00",
-            end: formatDate(endDate!) + "T23:59:59"
+  const getChartData = (
+    metrics: string, 
+    iodevice: string = '',
+    host: string, 
+    start: string, 
+    end: string) => {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          if(metrics === 'cpu') {
+            resolve(axiosRequestor.get("/cpu_util/trend", {
+              params: {
+                host: host,
+                start: start,
+                end: end
+              }
+            }));
+          }else if(metrics === 'memory') {
+            resolve(axiosRequestor.get("/mem_use/trend", {
+              params: {
+                host: host,
+                start: start,
+                end: end
+              }
+            }));
+          }else if(metrics === 'io') {
+            resolve(axiosRequestor.get("io/trend", {
+              params: {
+                host: host,
+                device: iodevice,
+                start: start,
+                end: end
+              }
+            }));
+          }else {
+            reject('undefined metrics')
           }
-        }).then(function(res) {
-          console.log("io set update. rc is " + res.data.rc)
-          iocd.push(buildIOChartDataSet(res.data.result, device))
-          setIOChartData(cloneDeep(iocd))
-        });
-      }
-    });
-  };
+        }, 1000);
+      })
+  }
 
+  const updateChartData2 = async () => {
+    let chartDataResults: Array<ChartDataResult> = []; 
+    let promises: Array<Promise<any>> = [];
+    
+    let hl: Array<string> = [];
+    if(host === 'all') {
+      hl = hostlist.filter(function(x){return x != 'all';});
+    }else {
+      hl = [host];
+    }
+    for(const h of hl) {
+      if(metrics === 'io') {
+        const devices = await axiosRequestor.get("/iodevicelist:" + h);
+        for(const device of devices.data) {
+          const promise = getChartData(
+              metrics, device, h,
+              formatDate(startDate!) + "T00:00:00",
+              formatDate(endDate!) + "T23:59:59"
+          );
+          chartDataResults.push({
+            promise: promise,
+            host: h,
+            metrics: metrics,
+            device: device,
+            rc: undefined,
+            chartdata: undefined,
+          })
+          promises.push(promise);
+        }
+
+      }else {
+        const promise = getChartData(
+          metrics, '', h,
+          formatDate(startDate!) + "T00:00:00",
+          formatDate(endDate!) + "T23:59:59"
+        );
+        chartDataResults.push({
+          promise: promise,
+          host: h,
+          metrics: metrics,
+          device: '',
+          rc: undefined,
+          chartdata: undefined,
+        })
+        promises.push(promise);
+      }
+    }
+    const resolvedPromises = await Promise.all(promises)
+    for(let i = 0; i < resolvedPromises.length; i++) {
+      const resPromise = resolvedPromises[i];
+      chartDataResults[i].rc = resPromise.data.rc; 
+      if (chartDataResults[i].metrics === 'cpu') {
+        chartDataResults[i].chartdata = 
+            buildCPUChartDataSet(resPromise.data.result); 
+      }
+      else if (chartDataResults[i].metrics === 'memory') {
+        chartDataResults[i].chartdata = 
+            buildMEMChartDataSet(resPromise.data.result); 
+      }
+      else if (chartDataResults[i].metrics === 'io') {
+        chartDataResults[i].chartdata = 
+            buildIOChartDataSet(resPromise.data.result, chartDataResults[i].device); 
+      }
+    }
+    setRenderCharts(chartDataResults);
+  }
   return (
     <div className="App">
-      <header className="App-header">
+      <ThemeProvider theme={theme}>
       <Box className="appbar-wrap ignore-print-area">
-        <AppBar position="static" color='transparent'>
+        <AppBar 
+          position="static"
+          color="primary"
+        >
           <Container maxWidth="xl">
             <Toolbar disableGutters>
               <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -317,6 +432,26 @@ function App() {
               </LocalizationProvider>
               <Box className='appbar-form-item'>
               <FormControl>
+                <InputLabel id="host-select-label" className='appbar-inputlabel'>Metrics</InputLabel>
+                <Select
+                  className='appbar-selectbox'
+                  labelId="metrics-select-label"
+                  id="metrics-select"
+                  value={metrics}
+                  label='Metrics'
+                  onChange={handleChangeMetrics}
+                >
+                {metricslist.map((h) => (
+                  <MenuItem
+                    key={h}
+                    value={h}
+                  >{h}</MenuItem>
+                ))}
+                </Select>
+              </FormControl>
+              </Box>
+              <Box className='appbar-form-item'>
+              <FormControl>
                 <InputLabel id="host-select-label" className='appbar-inputlabel'>Host</InputLabel>
                 <Select
                   className='appbar-selectbox'
@@ -335,51 +470,54 @@ function App() {
                 </Select>
               </FormControl>
               </Box>
+
               <Box className='appbar-form-item'>
               <Button 
-                onClick={updateChartData}
+                onClick={updateChartData2}
                 variant="contained"
-                color='primary'
+                color='secondary'
               >Render</Button>
               </Box>
             </Toolbar>
           </Container>
         </AppBar>
        </Box>
+       <Box className="head-space ignore-print-area"></Box>
 
-       <Box className='print-block'>
-          <LineChart
-            title={'CPU Utilization'}
-            host={host}
-            labels={cpuChartData.labels}
-            datasets={cpuChartData.datasets}
-          >
-          </LineChart>
-        </Box>
-
-        <Box className='print-block page-break'>
-          <LineChart
-            title={'Memory Usage'}
-            host={host}
-            labels={memChartData.labels}
-            datasets={memChartData.datasets}
-          >
-          </LineChart>
-        </Box>
-
-        {ioChartData.map((iocd, index) => (
-          <Box className='print-block page-break'>
-            <LineChart
-              title={'Disk IO'}
-              host={host}
-              key={index}
-              labels={iocd.labels}
-              datasets={iocd.datasets}
-            >
-            </LineChart>
+      <Box className="App-header">
+       {renderCharts.map((renderChart, index) => (
+         <Box className='print-block page-break'>
+          <Box>
+            <ul className='print-header'>
+              <li className='print-header-item-left'>
+                <h4>報告資料15-2</h4>
+              </li>
+              <li className='print-header-item-center'>
+                <h4>メモリ使用状況</h4>
+              </li>
+              <li className='print-header-item-right'>
+                <h4></h4>
+              </li>
+            </ul>
+         </Box>
+          <Box className='print-block'>
+           <LineChart
+             title={metrics2ChartTitle.get(renderChart.metrics)!}
+             host={renderChart.host}
+             labels={renderChart.chartdata.labels}
+             datasets={renderChart.chartdata.datasets}
+             key={index}
+           >
+           </LineChart>
           </Box>
-        ))}
-      </header>
+          <Box><p className='print-graph-number'>図11 メモリ使用状況 (hostname)</p></Box>
+          <Box className='print-footer'>
+            <h5>報告資料15-2</h5>
+          </Box>
+         </Box>
+       ))}
+      </Box>
+      </ThemeProvider>
     </div>
   );
 }

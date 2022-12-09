@@ -12,7 +12,6 @@ import {
 } from 'chart.js'
 import 'chartjs-adapter-date-fns';
 import { Line } from "react-chartjs-2"
-import { fontSize } from "@mui/system";
 
 ChartJS.register(
   CategoryScale,
