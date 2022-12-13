@@ -10,8 +10,6 @@ import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
 import Select, { SelectChangeEvent } from '@mui/material/Select'
 
-import LineChart from './components/LineChart';
-
 import axios from 'axios'
 import Container from '@mui/material/Container';
 import Toolbar from '@mui/material/Toolbar';
@@ -23,6 +21,8 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 import {createTheme, ThemeProvider } from '@mui/material/styles';
+import ChartBlock from './components/ChartBlock';
+import InfoForm from './components/InfoForm';
 
 export type HandleChangeDateFuncType = (date: Date|null|undefined) => void;
 export type DBResultCPUData = {
@@ -52,6 +52,8 @@ export type ChartDataResult = {
   host: string
   metrics: string
   device: string
+  unit: string
+  ymax: undefined|number
   rc: undefined|string
   chartdata: any
 }
@@ -85,10 +87,20 @@ const metrics2ChartTitle: Map<string, string> = new Map([
   ['io', 'Disk IO'],
 ])
 
-const metrics2JpTitle: Map<string, string> = new Map([
-  ['cpu', 'CPU使用状況'],
-  ['memory', 'メモリ使用状況'],
-  ['io', 'ディスク使用状況'],
+const metrics2JP: Map<string, string> = new Map([
+  ['cpu', 'CPU'],
+  ['memory', 'メモリ'],
+  ['io', 'ディスク'],
+])
+
+const metrics2Unit: Map<string, string> = new Map([
+  ['cpu', '[%]'],
+  ['memory', '[kb]'],
+  ['io', '[sec/s]'],
+])
+
+const metrics2ymax: Map<string, number> = new Map([
+  ['cpu', 100]
 ])
 
 const axiosRequestor = axios.create({
@@ -99,6 +111,15 @@ const axiosRequestor = axios.create({
   },
   responseType: "json",
 })
+
+function formatString(
+    template: string, 
+    values?: { [key: string]: string|number|null|undefined}
+  ): string {
+  return !values
+  ? template
+  : new Function(...Object.keys(values), `return \`${template}\`;`)(...Object.values(values).map(value=>value ?? ''))
+}
 
 function formatDate(date: Date): String {
   return format(date, 'yyyy-MM-dd')
@@ -250,20 +271,16 @@ function App() {
   ];
   const h: string = '';
   const m: string = 'cpu';
-  const cpuChart = {
-    labels: [new Date()],
-    datasets: [{
-      label: 'null', data: [0], borderColor:"hsl(0,0%,0%)"
-    }],
-  };
-  const memChart = {
-    labels: [new Date()],
-    datasets: [{
-      label: 'null', data: [0], borderColor:"hsl(0,0%,0%)"
-    }],
-  };
-  const ioChart: Array<any> = [];
   const charts: Array<ChartDataResult> = [];
+  const chartInfo = {
+    leftHeader: "報告資料15-3",
+    rightHeader: "",
+    centerHeader: "${metrics}使用状況",
+    footer: "報告資料15-3-${pageIndex}",
+    chartNumber: "図${chartIndex} ${metrics}使用状況 (${host})",
+    chartIndexStart: 21,
+    pageIndexStart: 1,
+  }
 
   const [hostlist, setHostlist] = useState(hosts);
   const [metricslist, setMetricslist] = useState(metricses);
@@ -356,6 +373,8 @@ function App() {
             host: h,
             metrics: metrics,
             device: device,
+            unit: metrics2Unit.get(metrics)!,
+            ymax: metrics2ymax.get(metrics),
             rc: undefined,
             chartdata: undefined,
           })
@@ -373,6 +392,8 @@ function App() {
           host: h,
           metrics: metrics,
           device: '',
+          unit: metrics2Unit.get(metrics)!,
+          ymax: metrics2ymax.get(metrics),
           rc: undefined,
           chartdata: undefined,
         })
@@ -482,41 +503,75 @@ function App() {
           </Container>
         </AppBar>
        </Box>
-       <Box className="head-space ignore-print-area"></Box>
-
-      <Box className="App-header">
-       {renderCharts.map((renderChart, index) => (
-         <Box className='print-block page-break'>
-          <Box>
-            <ul className='print-header'>
-              <li className='print-header-item-left'>
-                <h4>報告資料15-2</h4>
-              </li>
-              <li className='print-header-item-center'>
-                <h4>メモリ使用状況</h4>
-              </li>
-              <li className='print-header-item-right'>
-                <h4></h4>
-              </li>
-            </ul>
-         </Box>
-          <Box className='print-block'>
-           <LineChart
-             title={metrics2ChartTitle.get(renderChart.metrics)!}
-             host={renderChart.host}
-             labels={renderChart.chartdata.labels}
-             datasets={renderChart.chartdata.datasets}
-             key={index}
-           >
-           </LineChart>
-          </Box>
-          <Box><p className='print-graph-number'>図11 メモリ使用状況 (hostname)</p></Box>
-          <Box className='print-footer'>
-            <h5>報告資料15-2</h5>
-          </Box>
-         </Box>
-       ))}
+       <Box className="head-space ignore-print-area">
       </Box>
+      <Box className="ignore-print-area">
+        <InfoForm
+          leftHeader={chartInfo.leftHeader}
+          centerHeader={chartInfo.centerHeader}
+          rightHeader={chartInfo.rightHeader}
+          footer={chartInfo.footer}
+          chartNumber={chartInfo.chartNumber}
+          chartIndexStart={chartInfo.chartIndexStart}
+          pageIndexStart={chartInfo.pageIndexStart}
+        ></InfoForm>
+      </Box>
+       <Box className="App-header">
+        {renderCharts.map((renderChart, index) => (
+            <ChartBlock
+              chartTitle={metrics2ChartTitle.get(renderChart.metrics)!}
+              chartHost={renderChart.host}
+              metrics={renderChart.metrics}
+              chartLabels={renderChart.chartdata.labels}
+              chartDatasets={renderChart.chartdata.datasets}
+              leftHeader={formatString(chartInfo.leftHeader,
+                {
+                  host: renderChart.host.split('.')[0],
+                  metrics: metrics2JP.get(renderChart.metrics)!,
+                  pageIndex: index + chartInfo.pageIndexStart,
+                  chartIndex: index + chartInfo.chartIndexStart,
+                }
+                )}
+              rightHeader={formatString(chartInfo.rightHeader,
+                {
+                  host: renderChart.host.split('.')[0],
+                  metrics: metrics2JP.get(renderChart.metrics)!,
+                  pageIndex: index + chartInfo.pageIndexStart,
+                  chartIndex: index + chartInfo.chartIndexStart,
+ 
+                }
+                )}
+              centerHeader={formatString(chartInfo.centerHeader,
+                {
+                  host: renderChart.host.split('.')[0],
+                  metrics: metrics2JP.get(renderChart.metrics)!,
+                  pageIndex: index + chartInfo.pageIndexStart,
+                  chartIndex: index + chartInfo.chartIndexStart,
+                }
+                )}
+              footer={formatString(chartInfo.footer,
+                {
+                  host: renderChart.host.split('.')[0],
+                  metrics: metrics2JP.get(renderChart.metrics)!,
+                  pageIndex: index + chartInfo.pageIndexStart,
+                  chartIndex: index + chartInfo.chartIndexStart,
+                }
+                )}
+              chartNumber={formatString(chartInfo.chartNumber,
+                {
+                  host: renderChart.host.split('.')[0],
+                  metrics: metrics2JP.get(renderChart.metrics)!,
+                  pageIndex: index + chartInfo.pageIndexStart,
+                  chartIndex: index + chartInfo.chartIndexStart,
+                }
+                )}
+              pageIndex={index + chartInfo.pageIndexStart}
+              unit={renderChart.unit}
+              ymax={renderChart.ymax}
+              key={index}
+            ></ChartBlock>
+        ))}
+       </Box>
       </ThemeProvider>
     </div>
   );

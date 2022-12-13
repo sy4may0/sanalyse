@@ -30,7 +30,8 @@ export type ChartDataProps = {
   host: string
   labels: Array<Date>
   datasets: Array<any>
-
+  ymax: number|undefined
+  unit: string
 };
 
 function LineChart(props: ChartDataProps) {
@@ -47,25 +48,31 @@ function LineChart(props: ChartDataProps) {
       }
     },
     scales:{
-      y: {
+     y: {
         beginAtZero: true,
+        max: props.ymax,
+        ticks : {
+          callback: function(tick: any) {
+            return tick.toString() + props.unit;
+          }
+        }
       },
       x: {
         type: 'time',
         adapters: {
         },
         time: {
-          unit: 'hour',
+          unit: 'day',
           stepSize: 1,
           displayFormats: {
-            'hour': 'dd HH:MM'
+            'day': 'MM/dd'
           }
         }
       },
-   },
+    },
     plugins: {
-     legend: {
-        position: 'top' as const,
+      legend: {
+         position: 'top' as const,
       },
       title: {
         display: true,
@@ -78,7 +85,7 @@ function LineChart(props: ChartDataProps) {
     marginLeft: "auto",
     marginRight: "auto",
     margin: "10px",
-    width: "1080px",
+    width: "980px",
   };
 
   return(
