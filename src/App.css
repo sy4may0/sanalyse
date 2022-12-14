@@ -9,8 +9,56 @@
 
 .appbar-wrap {
   width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
 }
 
+.print-header {
+  display: -webkit-flex;
+  display: flex;
+  justify-content: center; 
+  flex-wrap: wrap;
+}
+
+ul li {
+  flex-grow: 1;
+}
+h4 {
+  margin: 0;
+}
+
+.head-space {
+  margin-bottom: 60px;
+}
+
+.print-header-item-left {
+  list-style: none;
+  width: 300px;
+  text-align: left;
+  font-size:smaller;
+}
+.print-header-item-center {
+  list-style: none;
+  width: 300px;
+  text-align: center;
+  font-size:smaller;
+}
+.print-header-item-right {
+  list-style: none;
+  width: 300px;
+  text-align: right;
+  font-size:smaller;
+}
+.print-graph-number {
+  font-size: small;
+  text-decoration: underline;
+  margin: 0;
+}
+.print-footer {
+  font-size: small;
+  margin-top: 50px;
+}
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
     animation: App-logo-spin infinite 20s linear;
@@ -20,6 +68,9 @@
 @media print {
   .ignore-print-area{
     display:none;
+  }
+  .print-header-footer{
+    display: flexbox;
   }
   .print-block{
     size: A4 landscape;
