@@ -22,9 +22,11 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 import {createTheme, ThemeProvider } from '@mui/material/styles';
 import ChartBlock from './components/ChartBlock';
-import InfoForm from './components/InfoForm';
+import PageSettingForm from './components/PageSettingForm';
+import { Backdrop, CircularProgress, Modal, Typography } from '@mui/material';
 
 export type HandleChangeDateFuncType = (date: Date|null|undefined) => void;
+export type HandleApplyPageSettingFuncType = (props: PageSetting) => void;
 export type DBResultCPUData = {
   datetime: Array<number>
   usr: Array<number>
@@ -64,6 +66,16 @@ export type DBResultIOData = {
   writesec: Array<number>
 }
 
+export type PageSetting = {
+  leftHeader: string
+  rightHeader: string
+  centerHeader: string
+  footer: string
+  chartNumber: string
+  chartIndexStart: number
+  pageIndexStart: number
+}
+
 const theme = createTheme({
   palette: {
     primary: {
@@ -80,6 +92,17 @@ const theme = createTheme({
     },
   },
 })
+
+const modalStyle = {
+  position: 'absolute' as 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 720,
+  bgcolor: 'background.paper',
+  boxShadow: 24,
+  p: 4,
+};
 
 const metrics2ChartTitle: Map<string, string> = new Map([
   ['cpu', 'CPU Utilization'],
@@ -263,16 +286,16 @@ function buildIOChartDataSet(result: DBResultIOData, device: string): any {
 
 function App() {
 
-  const hosts: Array<string> = [];
-  const metricses: Array<string> = [
+  const initHosts: Array<string> = [];
+  const initMetricses: Array<string> = [
     'cpu',
     'memory',
     'io',
   ];
-  const h: string = '';
-  const m: string = 'cpu';
-  const charts: Array<ChartDataResult> = [];
-  const chartInfo = {
+  const initHostSelected: string = 'all';
+  const initMetricsSelected: string = 'cpu';
+  const initCharts: Array<ChartDataResult> = [];
+  const initPageSetting: PageSetting = {
     leftHeader: "報告資料15-3",
     rightHeader: "",
     centerHeader: "${metrics}使用状況",
@@ -282,13 +305,16 @@ function App() {
     pageIndexStart: 1,
   }
 
-  const [hostlist, setHostlist] = useState(hosts);
-  const [metricslist, setMetricslist] = useState(metricses);
-  const [host, setHost] = useState(h);
-  const [metrics, setMetrics] = useState(m);
+  const [hostlist, setHostlist] = useState(initHosts);
+  const [metricslist, setMetricslist] = useState(initMetricses);
+  const [hostSelected, setHost] = useState(initHostSelected);
+  const [metricsSelected, setMetrics] = useState(initMetricsSelected);
   const [startDate, setStartDate] = React.useState<Date|null>(new Date());
   const [endDate, setEndDate] = React.useState<Date|null>(new Date());
-  const [renderCharts, setRenderCharts] = useState(charts)
+  const [renderCharts, setRenderCharts] = useState(initCharts)
+  const [pageSettingModalOpen, setPageSettingModalOpen] = useState(false)
+  const [pageSetting, setPageSetting] = useState(initPageSetting)
+  const [backdropOpen, setBackdropOpen] = useState(false)
 
   // UseEffectの第二引数に空配列を渡すとコンポーネント読み込み時に1度だけ実行する処理を定義できる。
   useEffect(() => {
@@ -349,32 +375,34 @@ function App() {
       })
   }
 
-  const updateChartData2 = async () => {
+  const updateChartData = async () => {
+    handleBackdropOpen();
+
     let chartDataResults: Array<ChartDataResult> = []; 
     let promises: Array<Promise<any>> = [];
     
     let hl: Array<string> = [];
-    if(host === 'all') {
+    if(hostSelected === 'all') {
       hl = hostlist.filter(function(x){return x != 'all';});
     }else {
-      hl = [host];
+      hl = [hostSelected];
     }
     for(const h of hl) {
-      if(metrics === 'io') {
+      if(metricsSelected === 'io') {
         const devices = await axiosRequestor.get("/iodevicelist:" + h);
         for(const device of devices.data) {
           const promise = getChartData(
-              metrics, device, h,
+              metricsSelected, device, h,
               formatDate(startDate!) + "T00:00:00",
               formatDate(endDate!) + "T23:59:59"
           );
           chartDataResults.push({
             promise: promise,
             host: h,
-            metrics: metrics,
+            metrics: metricsSelected,
             device: device,
-            unit: metrics2Unit.get(metrics)!,
-            ymax: metrics2ymax.get(metrics),
+            unit: metrics2Unit.get(metricsSelected)!,
+            ymax: metrics2ymax.get(metricsSelected),
             rc: undefined,
             chartdata: undefined,
           })
@@ -383,17 +411,17 @@ function App() {
 
       }else {
         const promise = getChartData(
-          metrics, '', h,
+          metricsSelected, '', h,
           formatDate(startDate!) + "T00:00:00",
           formatDate(endDate!) + "T23:59:59"
         );
         chartDataResults.push({
           promise: promise,
           host: h,
-          metrics: metrics,
+          metrics: metricsSelected,
           device: '',
-          unit: metrics2Unit.get(metrics)!,
-          ymax: metrics2ymax.get(metrics),
+          unit: metrics2Unit.get(metricsSelected)!,
+          ymax: metrics2ymax.get(metricsSelected),
           rc: undefined,
           chartdata: undefined,
         })
@@ -418,6 +446,35 @@ function App() {
       }
     }
     setRenderCharts(chartDataResults);
+    handleBackdropClose();
+  }
+
+  const handlePageSettingModalOpen  = () => {
+    setPageSettingModalOpen(true)
+  }
+  const handlePageSettingModalClose  = () => {
+    setPageSettingModalOpen(false)
+  }
+
+  const handleBackdropOpen = () => {
+    setBackdropOpen(true)
+  }
+  const handleBackdropClose = () => {
+    setBackdropOpen(false)
+  }
+
+  const handleApplyPageSetting: HandleApplyPageSettingFuncType = (props: PageSetting) => {
+    const newPageSetting: PageSetting = {
+      leftHeader: props.leftHeader,
+      centerHeader: props.centerHeader,
+      rightHeader: props.rightHeader,
+      footer: props.footer,
+      chartNumber: props.chartNumber,
+      chartIndexStart: props.chartIndexStart,
+      pageIndexStart: props.pageIndexStart,
+    };
+    setPageSetting(newPageSetting);
+    handlePageSettingModalClose();
   }
   return (
     <div className="App">
@@ -458,7 +515,7 @@ function App() {
                   className='appbar-selectbox'
                   labelId="metrics-select-label"
                   id="metrics-select"
-                  value={metrics}
+                  value={metricsSelected}
                   label='Metrics'
                   onChange={handleChangeMetrics}
                 >
@@ -478,7 +535,7 @@ function App() {
                   className='appbar-selectbox'
                   labelId="host-select-label"
                   id="host-select"
-                  value={host}
+                  value={hostSelected}
                   label='Host'
                   onChange={handleChangeHost}
                 >
@@ -491,13 +548,18 @@ function App() {
                 </Select>
               </FormControl>
               </Box>
-
               <Box className='appbar-form-item'>
-              <Button 
-                onClick={updateChartData2}
-                variant="contained"
-                color='secondary'
-              >Render</Button>
+                <Button
+                  onClick={handlePageSettingModalOpen}
+                  color='secondary'
+                >Page Setting</Button>
+              </Box>
+              <Box className='appbar-form-item'>
+                <Button 
+                  onClick={updateChartData}
+                  variant="contained"
+                  color='secondary'
+                >Render</Button>
               </Box>
             </Toolbar>
           </Container>
@@ -506,70 +568,92 @@ function App() {
        <Box className="head-space ignore-print-area">
       </Box>
       <Box className="ignore-print-area">
-        <InfoForm
-          leftHeader={chartInfo.leftHeader}
-          centerHeader={chartInfo.centerHeader}
-          rightHeader={chartInfo.rightHeader}
-          footer={chartInfo.footer}
-          chartNumber={chartInfo.chartNumber}
-          chartIndexStart={chartInfo.chartIndexStart}
-          pageIndexStart={chartInfo.pageIndexStart}
-        ></InfoForm>
+        <Backdrop
+          sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1}}
+          open={backdropOpen}
+        >
+          <CircularProgress color="inherit"></CircularProgress>
+        </Backdrop>
+        <Modal
+          open={pageSettingModalOpen}
+          onClose={handlePageSettingModalClose}
+          aria-labelledby="modal-page-setting"
+          aria-describedby="modal-form-description"
+        >
+          <Box className='page-setting-modal' sx={modalStyle}>
+            <Container>
+              <Typography id="modal-page-setting" variant='h6' component='h2'>
+                Page Settings
+              </Typography>
+              <hr></hr>
+              <PageSettingForm
+                leftHeader={pageSetting.leftHeader}
+                centerHeader={pageSetting.centerHeader}
+                rightHeader={pageSetting.rightHeader}
+                footer={pageSetting.footer}
+                chartNumber={pageSetting.chartNumber}
+                chartIndexStart={pageSetting.chartIndexStart}
+                pageIndexStart={pageSetting.pageIndexStart}
+                handleApply={handleApplyPageSetting}
+              ></PageSettingForm>
+            </Container>
+          </Box>
+        </Modal>
       </Box>
-       <Box className="App-header">
+      <Box className="App-header">
         {renderCharts.map((renderChart, index) => (
-            <ChartBlock
-              chartTitle={metrics2ChartTitle.get(renderChart.metrics)!}
-              chartHost={renderChart.host}
-              metrics={renderChart.metrics}
-              chartLabels={renderChart.chartdata.labels}
-              chartDatasets={renderChart.chartdata.datasets}
-              leftHeader={formatString(chartInfo.leftHeader,
-                {
-                  host: renderChart.host.split('.')[0],
-                  metrics: metrics2JP.get(renderChart.metrics)!,
-                  pageIndex: index + chartInfo.pageIndexStart,
-                  chartIndex: index + chartInfo.chartIndexStart,
-                }
-                )}
-              rightHeader={formatString(chartInfo.rightHeader,
-                {
-                  host: renderChart.host.split('.')[0],
-                  metrics: metrics2JP.get(renderChart.metrics)!,
-                  pageIndex: index + chartInfo.pageIndexStart,
-                  chartIndex: index + chartInfo.chartIndexStart,
+          <ChartBlock
+            chartTitle={metrics2ChartTitle.get(renderChart.metrics)!}
+            chartHost={renderChart.host}
+            metrics={renderChart.metrics}
+            chartLabels={renderChart.chartdata.labels}
+            chartDatasets={renderChart.chartdata.datasets}
+            leftHeader={formatString(pageSetting.leftHeader,
+              {
+                host: renderChart.host.split('.')[0],
+                metrics: metrics2JP.get(renderChart.metrics)!,
+                pageIndex: index + pageSetting.pageIndexStart,
+                chartIndex: index + pageSetting.chartIndexStart,
+              }
+              )}
+            rightHeader={formatString(pageSetting.rightHeader,
+              {
+                host: renderChart.host.split('.')[0],
+                metrics: metrics2JP.get(renderChart.metrics)!,
+                pageIndex: index + pageSetting.pageIndexStart,
+                chartIndex: index + pageSetting.chartIndexStart,
  
-                }
-                )}
-              centerHeader={formatString(chartInfo.centerHeader,
-                {
-                  host: renderChart.host.split('.')[0],
-                  metrics: metrics2JP.get(renderChart.metrics)!,
-                  pageIndex: index + chartInfo.pageIndexStart,
-                  chartIndex: index + chartInfo.chartIndexStart,
-                }
-                )}
-              footer={formatString(chartInfo.footer,
-                {
-                  host: renderChart.host.split('.')[0],
-                  metrics: metrics2JP.get(renderChart.metrics)!,
-                  pageIndex: index + chartInfo.pageIndexStart,
-                  chartIndex: index + chartInfo.chartIndexStart,
-                }
-                )}
-              chartNumber={formatString(chartInfo.chartNumber,
-                {
-                  host: renderChart.host.split('.')[0],
-                  metrics: metrics2JP.get(renderChart.metrics)!,
-                  pageIndex: index + chartInfo.pageIndexStart,
-                  chartIndex: index + chartInfo.chartIndexStart,
-                }
-                )}
-              pageIndex={index + chartInfo.pageIndexStart}
-              unit={renderChart.unit}
-              ymax={renderChart.ymax}
-              key={index}
-            ></ChartBlock>
+              }
+              )}
+            centerHeader={formatString(pageSetting.centerHeader,
+              {
+                host: renderChart.host.split('.')[0],
+                metrics: metrics2JP.get(renderChart.metrics)!,
+                pageIndex: index + pageSetting.pageIndexStart,
+                chartIndex: index + pageSetting.chartIndexStart,
+              }
+              )}
+            footer={formatString(pageSetting.footer,
+              {
+                host: renderChart.host.split('.')[0],
+                metrics: metrics2JP.get(renderChart.metrics)!,
+                pageIndex: index + pageSetting.pageIndexStart,
+                chartIndex: index + pageSetting.chartIndexStart,
+              }
+              )}
+            chartNumber={formatString(pageSetting.chartNumber,
+              {
+                host: renderChart.host.split('.')[0],
+                metrics: metrics2JP.get(renderChart.metrics)!,
+                pageIndex: index + pageSetting.pageIndexStart,
+                chartIndex: index + pageSetting.chartIndexStart,
+              }
+              )}
+            pageIndex={index + pageSetting.pageIndexStart}
+            unit={renderChart.unit}
+            ymax={renderChart.ymax}
+            key={index}
+          ></ChartBlock>
         ))}
        </Box>
       </ThemeProvider>
